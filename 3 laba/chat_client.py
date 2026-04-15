@@ -1,24 +1,19 @@
 ﻿"""
-ЛР3 — чат (клиент). Папка с кодом та же, что у сервера, например:
-  C:\\Users\\User\\ksis_clone\\3 laba\\
+ЛР3 — чат (клиент). TCP + опционально поиск сервера по UDP broadcast.
 
-Запуск в CMD (отдельное окно, после того как сервер уже запущен):
-  cd /d C:\\Users\\User\\ksis_clone\\3 laba
-  py chat_client.py 127.0.0.1 5000 --nick ТвоеИмя
+Обычный запуск:
+  py chat_client.py 127.0.0.1 5000 --nick Имя
 
-Второй клиент (другой IP на этом ПК, если настроены loopback-алиасы):
-  py chat_client.py 127.0.0.1 5000 --nick Другой --bind 127.0.0.2
+Поиск сервера в LAN (UDP broadcast):
+  py chat_client.py --discover --nick Имя
 
-Выход из чата: набери /quit и Enter
-
-В PyCharm: Run Configuration для chat_client.py
-  Parameters: 127.0.0.1 5000 --nick Misha
-  Working directory: ...\\3 laba
+Wireshark: udp.port == 5001 — увидишь KSIS_DISCOVER и ответы KSIS_TCP / рассылку KSIS_ANN.
 """
 import argparse
 import socket
-import threading
 import sys
+import threading
+import time
 
 
 def recv_exact(sock: socket.socket, n: int) -> bytes:
@@ -54,19 +49,63 @@ def reader(sock: socket.socket) -> None:
         pass
 
 
+def discover_server(udp_port: int, wait_sec: float = 3.0) -> tuple[str, int]:
+    """
+    Шлёт KSIS_DISCOVER в broadcast, ждёт KSIS_TCP|host|port или KSIS_ANN|host|port.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    except OSError:
+        pass
+    sock.bind(("0.0.0.0", 0))
+    sock.sendto(b"KSIS_DISCOVER\n", ("255.255.255.255", udp_port))
+
+    sock.settimeout(0.25)
+    deadline = time.time() + wait_sec
+    while time.time() < deadline:
+        try:
+            data, addr = sock.recvfrom(2048)
+        except socket.timeout:
+            continue
+        text = data.decode("utf-8", errors="replace").strip()
+        for prefix in ("KSIS_TCP|", "KSIS_ANN|"):
+            if text.startswith(prefix):
+                parts = text.split("|")
+                if len(parts) >= 3:
+                    host = parts[1].strip()
+                    port_str = parts[2].strip().split()[0]
+                    port = int(port_str)
+                    print(f"[discover] сервер: {host}:{port} (от {addr[0]})")
+                    sock.close()
+                    return host, port
+    sock.close()
+    raise SystemExit("Сервер не найден по UDP. Запусти chat_server и проверь порт --udp-port.")
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Simple TCP chat client")
-    parser.add_argument("host")
-    parser.add_argument("port", type=int)
+    parser = argparse.ArgumentParser(description="TCP chat client (+ UDP discover)")
+    parser.add_argument("host", nargs="?", default=None)
+    parser.add_argument("port", nargs="?", type=int, default=None)
     parser.add_argument("--nick", required=True)
-    parser.add_argument("--bind", default=None, help="local IP to bind (e.g. 127.0.0.2)")
+    parser.add_argument("--bind", default=None, help="локальный IP для TCP (например 127.0.0.2)")
+    parser.add_argument("--discover", action="store_true", help="найти сервер через UDP broadcast")
+    parser.add_argument("--udp-port", type=int, default=5001, help="UDP порт (как у сервера)")
+    parser.add_argument("--discover-wait", type=float, default=3.0, help="сек ожидания ответов UDP")
     args = parser.parse_args()
+
+    if args.discover:
+        host, port = discover_server(args.udp_port, args.discover_wait)
+    else:
+        if args.host is None or args.port is None:
+            parser.error("укажи host port или используй --discover")
+        host, port = args.host, args.port
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     if args.bind:
         sock.bind((args.bind, 0))
 
-    sock.connect((args.host, args.port))
+    sock.connect((host, port))
     send_frame(sock, f"JOIN {args.nick}")
 
     t = threading.Thread(target=reader, args=(sock,), daemon=True)
