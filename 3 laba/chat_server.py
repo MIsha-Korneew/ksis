@@ -1,4 +1,19 @@
-﻿import argparse
+﻿"""
+ЛР3 — чат (сервер). Где лежит код: папка «3 laba» в клоне репозитория, например:
+  C:\\Users\\User\\ksis_clone\\3 laba\\
+
+В PyCharm: File → Open → выбери папку ksis_clone (или только 3 laba).
+  Файлы: chat_server.py, chat_client.py
+
+Запуск в CMD (сначала перейди в папку с файлами):
+  cd /d C:\\Users\\User\\ksis_clone\\3 laba
+  py chat_server.py 0.0.0.0 5000
+
+В PyCharm: Run → Edit Configurations → Script path: chat_server.py
+  Parameters: 0.0.0.0 5000
+  Working directory: ...\\3 laba
+"""
+import argparse
 import socket
 import threading
 from typing import Dict, Tuple

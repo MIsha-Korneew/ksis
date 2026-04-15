@@ -1,4 +1,21 @@
-﻿import argparse
+﻿"""
+ЛР3 — чат (клиент). Папка с кодом та же, что у сервера, например:
+  C:\\Users\\User\\ksis_clone\\3 laba\\
+
+Запуск в CMD (отдельное окно, после того как сервер уже запущен):
+  cd /d C:\\Users\\User\\ksis_clone\\3 laba
+  py chat_client.py 127.0.0.1 5000 --nick ТвоеИмя
+
+Второй клиент (другой IP на этом ПК, если настроены loopback-алиасы):
+  py chat_client.py 127.0.0.1 5000 --nick Другой --bind 127.0.0.2
+
+Выход из чата: набери /quit и Enter
+
+В PyCharm: Run Configuration для chat_client.py
+  Parameters: 127.0.0.1 5000 --nick Misha
+  Working directory: ...\\3 laba
+"""
+import argparse
 import socket
 import threading
 import sys
