@@ -112,6 +112,7 @@ def main() -> None:
 
     t = threading.Thread(target=reader, args=(sock,), daemon=True)
     t.start()
+    print("Сообщения — строка и Enter; выход: /quit или Ctrl+C")
 
     try:
         while True:
