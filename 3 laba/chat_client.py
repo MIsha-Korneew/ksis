@@ -1,10 +1,12 @@
-﻿"""
+﻿r"""
 ЛР3 — чат (клиент). TCP + опционально поиск сервера по UDP broadcast.
 
 Обычный запуск:
+  cd /d C:\Users\User\ksis_clone\3 laba
   py chat_client.py 127.0.0.1 5000 --nick Имя
 
 Поиск сервера в LAN (UDP broadcast):
+  cd /d C:\Users\User\ksis_clone\3 laba
   py chat_client.py --discover --nick Имя
 
 Wireshark: udp.port == 5001 — увидишь KSIS_DISCOVER и ответы KSIS_TCP / рассылку KSIS_ANN.
