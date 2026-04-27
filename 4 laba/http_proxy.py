@@ -3,7 +3,6 @@
 
 Запуск:
   py http_proxy.py --port 8080
-  py http_proxy.py --port 8080 --blacklist blacklist.txt
 
 В браузере настрой HTTP-прокси (не HTTPS): 127.0.0.1:8080
 
@@ -261,44 +260,8 @@ def relay_response_body(
         dst.sendall(chunk)
 
 
-def load_blacklist(path: str) -> List[str]:
-    out: List[str] = []
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            out.append(line.lower())
-    return out
-
-
-def is_blocked(rules: List[str], full_url: str, host: str) -> bool:
-    fu = full_url.lower()
-    h = host.lower()
-    for r in rules:
-        if r == h or r in fu:
-            return True
-    return False
-
-
-def blocked_page() -> bytes:
-    html = (
-        "<!DOCTYPE html><html><head><meta charset='utf-8'><title>403</title></head>"
-        "<body><h1>403 Заблокировано прокси</h1></body></html>"
-    )
-    b = html.encode("utf-8")
-    h = (
-        "HTTP/1.1 403 Forbidden\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        f"Content-Length: {len(b)}\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    ).encode("ascii")
-    return h + b
-
-
 def handle_client(
-    client: socket.socket, addr: tuple, rules: List[str], lock: threading.Lock
+    client: socket.socket, addr: tuple, lock: threading.Lock
 ) -> None:
     try:
         while True:
@@ -322,12 +285,6 @@ def handle_client(
             try:
                 full_url, host, port, path = resolve_target(target, headers)
             except ValueError:
-                return
-            if rules and is_blocked(rules, full_url, host):
-                try:
-                    client.sendall(blocked_page())
-                except OSError:
-                    pass
                 return
             _, body = buf.split(b"\r\n\r\n", 1)
             up: Optional[socket.socket] = None
@@ -397,12 +354,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="HTTP proxy (KSIS lab 4)")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--blacklist", default=None)
     args = ap.parse_args()
-    rules: List[str] = []
-    if args.blacklist:
-        rules = load_blacklist(args.blacklist)
-        print(f"Blacklist: {len(rules)} правил из {args.blacklist}")
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -415,7 +367,7 @@ def main() -> None:
         while True:
             c, a = srv.accept()
             threading.Thread(
-                target=handle_client, args=(c, a, rules, lock), daemon=True
+                target=handle_client, args=(c, a, lock), daemon=True
             ).start()
     except KeyboardInterrupt:
         print("\nОстанов.")

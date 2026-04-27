@@ -3,18 +3,11 @@
 ## Файлы
 
 - `http_proxy.py` — прокси на сокетах, потоки на клиента; журнал `URL -> код`.
-- `blacklist.example.txt` — пример для **доп. задания** (чёрный список).
 
 ## Запуск
 
 ```text
 py http_proxy.py --port 8080
-```
-
-С доп. заданием:
-
-```text
-py http_proxy.py --port 8080 --blacklist blacklist.txt
 ```
 
 ## Браузер
@@ -31,7 +24,3 @@ py http_proxy.py --port 8080 --blacklist blacklist.txt
 
 - Фильтр, например: `ip.addr == 127.0.0.1` или твой IP + `tcp.port == 8080` к прокси и исходящий HTTP на 80/8000.
 - Видно: клиент (браузер) ↔ прокси ↔ origin.
-
-## Blacklist (доп.)
-
-В файле — по строке: домен (`example.com`) или подстрока URL. Совпадение — ответ `403` с HTML.
