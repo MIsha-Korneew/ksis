@@ -9,6 +9,9 @@
 
 Wireshark: фильтр  udp.port == 5001  или  tcp.port == 5000
 """
+# Маска подсети в этой программе нигде не задаётся: это параметр сети (ОС/роутер).
+# Здесь только IP-строки и порты. Вопросы про маску — из теории (защита), не из этого файла.
+
 import argparse
 import socket
 import threading
@@ -39,6 +42,7 @@ def recv_exact(sock: socket.socket, n: int) -> bytes:
 
 
 def recv_frame(sock: socket.socket) -> str:
+    # Прикладной протокол чата по TCP: 4 байта длины (big-endian) + UTF-8 текст
     header = recv_exact(sock, 4)
     length = int.from_bytes(header, "big")
     if length < 0 or length > 1_000_000:
@@ -48,11 +52,13 @@ def recv_frame(sock: socket.socket) -> str:
 
 
 def send_frame(sock: socket.socket, text: str) -> None:
+    # Сборка кадра и отправка по TCP (длина + полезная нагрузка)
     payload = text.encode("utf-8")
     sock.sendall(len(payload).to_bytes(4, "big") + payload)
 
 
 def broadcast_tcp(clients: Dict[socket.socket, Tuple[str, Tuple[str, int]]], text: str) -> None:
+    # Рассылка одной строки всем подключённым клиентам (чат «всем»)
     dead = []
     for s in list(clients.keys()):
         try:
@@ -73,6 +79,7 @@ def handle_client(
     clients: Dict[socket.socket, Tuple[str, Tuple[str, int]]],
     lock: threading.Lock,
 ) -> None:
+    # Один поток на одного TCP-клиента: чтение кадров, рассылка остальным
     nick = None
     try:
         first = recv_frame(conn)
@@ -83,6 +90,7 @@ def handle_client(
 
         with lock:
             clients[conn] = (nick, addr)
+            # Уведомить всех: новый участник
             broadcast_tcp(clients, f"SYS {nick} joined from {addr[0]}:{addr[1]}")
 
         while True:
@@ -94,6 +102,7 @@ def handle_client(
             if msg.startswith("MSG "):
                 text = msg[4:].rstrip("\n")
                 with lock:
+                    # Текст чата — всем подключённым
                     broadcast_tcp(clients, f"MSG {nick}: {text}")
             else:
                 send_frame(conn, "SYS protocol error: expected MSG or QUIT")
@@ -105,6 +114,7 @@ def handle_client(
             if conn in clients:
                 clients.pop(conn, None)
                 if nick:
+                    # Обрыв сокета / исключение — сообщить остальным
                     broadcast_tcp(clients, f"SYS {nick} disconnected")
         try:
             conn.close()
@@ -127,6 +137,7 @@ def udp_discovery_responder(
             except socket.timeout:
                 continue
             if b"KSIS_DISCOVER" in data or data.strip().startswith(b"KSIS_DISCOVER"):
+                # Ответ одноадресно отправителю (не broadcast)
                 reply = f"KSIS_TCP|{announce_ip}|{tcp_port}\n".encode("utf-8")
                 try:
                     udp.sendto(reply, addr)
@@ -146,6 +157,7 @@ def udp_broadcast_announcer(
     stop: threading.Event,
 ) -> None:
     """Периодически шлёт KSIS_ANN|ip|tcp_port на 255.255.255.255 (для Wireshark / клиентов)."""
+    # 255.255.255.255 — limited broadcast в LAN (это не маска подсети)
     dest = ("255.255.255.255", udp_port)
     msg = f"KSIS_ANN|{announce_ip}|{tcp_port}\n".encode("utf-8")
     while not stop.is_set():
@@ -158,6 +170,7 @@ def udp_broadcast_announcer(
 
 
 def main() -> None:
+    # Точка входа: поднять UDP (поиск/объявление) и TCP-сервер чата, цикл accept
     parser = argparse.ArgumentParser(description="TCP chat server + UDP broadcast")
     parser.add_argument("host", nargs="?", default="0.0.0.0", help="TCP bind address")
     parser.add_argument("port", nargs="?", type=int, default=5000, help="TCP port")
@@ -178,6 +191,7 @@ def main() -> None:
     udp.bind(("0.0.0.0", args.udp_port))
 
     stop_udp = threading.Event()
+    # Фоновые потоки: ответ на DISCOVER и периодический ANN
     t_disc = threading.Thread(
         target=udp_discovery_responder,
         args=(udp, announce_ip, args.port, stop_udp),
@@ -201,11 +215,12 @@ def main() -> None:
     print(f"UDP announce/discovery: 0.0.0.0:{args.udp_port} -> broadcast KSIS_ANN|{announce_ip}|{args.port}")
 
     clients: Dict[socket.socket, Tuple[str, Tuple[str, int]]] = {}
-    lock = threading.Lock()
+    lock = threading.Lock()  # общий словарь clients — только под lock
 
     try:
         while True:
             conn, addr = server.accept()  # conn — отдельный TCP-сокет клиента
+            # Новый клиент — новый поток (параллельно с остальными)
             t = threading.Thread(target=handle_client, args=(conn, addr, clients, lock), daemon=True)
             t.start()
     except KeyboardInterrupt:

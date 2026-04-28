@@ -11,6 +11,8 @@ r"""
 
 Wireshark: udp.port == 5001 — увидишь KSIS_DISCOVER и ответы KSIS_TCP / рассылку KSIS_ANN.
 """
+# Маска подсети в коде не используется (настраивается сетью/ОС). Здесь — IP, порты, сокеты.
+
 import argparse
 import socket
 import sys
@@ -29,6 +31,7 @@ def recv_exact(sock: socket.socket, n: int) -> bytes:
 
 
 def recv_frame(sock: socket.socket) -> str:
+    # Тот же формат кадра, что на сервере: 4 байта длины + UTF-8
     header = recv_exact(sock, 4)
     length = int.from_bytes(header, "big")
     if length < 0 or length > 1_000_000:
@@ -38,11 +41,13 @@ def recv_frame(sock: socket.socket) -> str:
 
 
 def send_frame(sock: socket.socket, text: str) -> None:
+    # Упаковка строки в кадр и отправка по TCP
     payload = text.encode("utf-8")
     sock.sendall(len(payload).to_bytes(4, "big") + payload)
 
 
 def reader(sock: socket.socket) -> None:
+    # Фоновое чтение входящих сообщений (не блокирует ввод с клавиатуры)
     try:
         while True:
             msg = recv_frame(sock)
@@ -62,6 +67,7 @@ def discover_server(udp_port: int, wait_sec: float = 3.0) -> tuple[str, int]:
     except OSError:
         pass
     sock.bind(("0.0.0.0", 0))
+    # Limited broadcast (не маска подсети) — «всем в LAN» на порт discovery
     sock.sendto(b"KSIS_DISCOVER\n", ("255.255.255.255", udp_port))
 
     sock.settimeout(0.25)
@@ -87,6 +93,7 @@ def discover_server(udp_port: int, wait_sec: float = 3.0) -> tuple[str, int]:
 
 
 def main() -> None:
+    # Опционально UDP discover → затем TCP connect, JOIN, цикл ввода MSG / QUIT
     parser = argparse.ArgumentParser(description="TCP chat client (+ UDP discover)")
     parser.add_argument("host", nargs="?", default=None)
     parser.add_argument("port", nargs="?", type=int, default=None)
@@ -110,6 +117,7 @@ def main() -> None:
         sock.bind((args.bind, 0))
 
     sock.connect((host, port))
+    # Первый кадр после соединения — регистрация ника на сервере
     send_frame(sock, f"JOIN {args.nick}")
 
     t = threading.Thread(target=reader, args=(sock,), daemon=True)
@@ -127,6 +135,7 @@ def main() -> None:
                 break
             if line.strip() == "":
                 continue
+            # Строка из консоли → кадр MSG … на сервер (тот разошлёт всем)
             send_frame(sock, f"MSG {line}")
     except KeyboardInterrupt:
         try:
