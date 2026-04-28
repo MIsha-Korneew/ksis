@@ -1,4 +1,4 @@
-﻿"""
+"""
 ЛР3 — чат (сервер). TCP + UDP broadcast (объявление и поиск сервера).
 
 Папка: C:\\Users\\User\\ksis_clone\\3 laba\\
@@ -17,6 +17,7 @@ from typing import Dict, Tuple
 
 def detect_local_ip() -> str:
     """IP для объявления в LAN (не 127.0.0.1, если возможно)."""
+    # --- сокет UDP (служебно: узнать локальный IP, не чат) ---
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("8.8.8.8", 80))
@@ -167,6 +168,7 @@ def main() -> None:
 
     announce_ip = args.announce_ip or detect_local_ip()
 
+    # --- сокет UDP: KSIS_DISCOVER / KSIS_ANN (порт args.udp_port) ---
     udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
@@ -189,6 +191,7 @@ def main() -> None:
     t_disc.start()
     t_ann.start()
 
+    # --- сокет TCP: чат (порт args.port), listen + accept ---
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((args.host, args.port))
@@ -202,7 +205,7 @@ def main() -> None:
 
     try:
         while True:
-            conn, addr = server.accept()
+            conn, addr = server.accept()  # conn — отдельный TCP-сокет клиента
             t = threading.Thread(target=handle_client, args=(conn, addr, clients, lock), daemon=True)
             t.start()
     except KeyboardInterrupt:

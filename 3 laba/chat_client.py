@@ -1,4 +1,4 @@
-﻿r"""
+r"""
 ЛР3 — чат (клиент). TCP + опционально поиск сервера по UDP broadcast.
 
 Обычный запуск:
@@ -55,6 +55,7 @@ def discover_server(udp_port: int, wait_sec: float = 3.0) -> tuple[str, int]:
     """
     Шлёт KSIS_DISCOVER в broadcast, ждёт KSIS_TCP|host|port или KSIS_ANN|host|port.
     """
+    # --- сокет UDP: только режим --discover ---
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -103,6 +104,7 @@ def main() -> None:
             parser.error("укажи host port или используй --discover")
         host, port = args.host, args.port
 
+    # --- сокет TCP: переписка с сервером ---
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     if args.bind:
         sock.bind((args.bind, 0))
